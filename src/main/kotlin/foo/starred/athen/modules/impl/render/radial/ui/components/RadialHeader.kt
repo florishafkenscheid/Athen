@@ -162,8 +162,7 @@ class RadialHeader(side: IPrimitiveElement<*>) {
                 RadialMenu.add(s0)
                 RadialEditor.working.clear()
                 RadialEditor.working.addAll(RadialMenu.slots)
-                RadialEditor.reload(0, -1)
-                cancel()
+                RadialEditor.reload(listOf(0))
             }
 
             attach(box1)
@@ -196,8 +195,7 @@ class RadialHeader(side: IPrimitiveElement<*>) {
                 RadialMenu.delete(RadialMenu.active)
                 RadialEditor.working.clear()
                 RadialEditor.working.addAll(RadialMenu.slots)
-                RadialEditor.reload(0, -1)
-                cancel()
+                RadialEditor.reload(listOf(0))
             }
 
             attach(box1)

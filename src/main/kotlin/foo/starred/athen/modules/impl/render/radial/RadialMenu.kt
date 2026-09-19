@@ -209,7 +209,16 @@ object RadialMenu : Module(
             }
 
             if (i1 != -1 && i2 in current.indices) {
-                current[i2].sub.getOrNull(i1)?.action?.run()
+                val selected = current[i2].sub.getOrNull(i1) ?: return@on cancel()
+                if (type == 2 && selected.sub.isNotEmpty()) {
+                    stack.addLast(selected.sub)
+                    i0 = -1
+                    i1 = -1
+                    i2 = -1
+                    return@on cancel()
+                }
+
+                selected.action.run()
                 react(false, bool = true)
                 return@on cancel()
             }
@@ -369,6 +378,7 @@ object RadialMenu : Module(
     private fun back() {
         stack.removeLast()
         i0 = -1
+        i1 = -1
         i2 = -1
     }
 

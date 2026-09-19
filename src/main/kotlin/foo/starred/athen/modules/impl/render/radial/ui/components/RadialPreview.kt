@@ -35,64 +35,27 @@ class RadialPreview(main: ContainerPrimitive) {
                 if (button != InputConstants.MOUSE_BUTTON_LEFT) return@on
                 cancel()
 
-                val s0 = RadialEditor.main
-                val s1 = RadialEditor.sub
-                val list0 = RadialEditor.working
+                val preview = RadialEditor.preview()
+                if (preview.wheel.isEmpty()) return@on
 
-                val x0 = x.toFloat()
-                val y0 = y.toFloat()
+                val centerX = self.x.toInt() + self.width.toInt() / 2
+                val centerY = self.y.toInt() + self.height.toInt() / 2
+                val dx = x.toFloat() - centerX
+                val dy = y.toFloat() - centerY
 
-                val x1 = self.x.toInt() + self.width.toInt() / 2
-                val y1 = self.y.toInt() + self.height.toInt() / 2
-
-                val b0 = RadialMenu.type == 0 && s1 >= 0 && s0 in list0.indices
-                val cur0 = if (b0) list0[s0].sub else list0
-                val num0 = maxOf(1, cur0.size)
-
-                val x2 = x0 - x1
-                val y2 = y0 - y1
-                val d0 = x2 * x2 + y2 * y2
-
-                if (d0 < 144f) {
-                    if (b0 || (RadialMenu.type == 2 && s0 in list0.indices && s1 >= 0)) RadialEditor.reload(s0, -1)
+                if (dx * dx + dy * dy < 144f) {
+                    RadialEditor.commit()
+                    RadialEditor.previewBack(preview)
                     return@on
                 }
 
-                val ex0 = if (b0) emptyList() else RadialEditor.extra()
-
-                var h0 = -1
-                var h1 = -1
-
-                if (d0 >= 225f) {
-                    if (!b0 && s0 in list0.indices) {
-                        h1 = when (RadialMenu.type) {
-                            2 -> RadialRenderState.hitRing(x0, y0, x1, y1, num0, RadialMenu.radius2, ex0.map { it.first }, false, RadialMenu.thickness)
-                            1 -> RadialRenderState.hitNested(x0, y0, x1, y1, num0, RadialMenu.radius2, s0, list0[s0].sub.size, false, RadialMenu.thickness)
-                            else -> -1
-                        }
-
-                        if (h1 != -1 && RadialMenu.type == 1) h0 = s0
-                    }
-
-                    if (h0 == -1 && h1 == -1) h0 = RadialRenderState.hit(x0, y0, x1, y1, num0, RadialMenu.radius1, RadialMenu.radius2)
-                }
-
+                val hit = hit(x.toFloat(), y.toFloat(), centerX, centerY, preview)
                 RadialEditor.commit()
 
-                if (b0) {
-                    if (h0 != -1) RadialEditor.reload(s0, h0)
-                    return@on
+                when {
+                    hit.outer >= 0 -> RadialEditor.selectPreviewOuter(preview, hit.outer)
+                    hit.main >= 0 -> RadialEditor.selectPreviewMain(preview, hit.main)
                 }
-
-                if (h1 != -1) {
-                    RadialEditor.reload(s0, h1)
-                    return@on
-                }
-
-                if (h0 == -1) return@on
-
-                if (RadialMenu.type == 0 && list0.getOrNull(h0)?.sub?.isNotEmpty() == true) RadialEditor.reload(h0, 0)
-                else RadialEditor.reload(h0, -1)
             }
 
             attach(main)
@@ -104,45 +67,32 @@ class RadialPreview(main: ContainerPrimitive) {
             interact = false
             attach(panel)
 
-            provider = { graphics ->
-                val s0 = RadialEditor.main
-                val s1 = RadialEditor.sub
-                val list0 = RadialEditor.working
+            provider = provider@{ graphics ->
+                val preview = RadialEditor.preview()
+                if (preview.wheel.isEmpty()) return@provider null
 
-                val x1 = panel.x.toInt() + panel.width.toInt() / 2
-                val y1 = panel.y.toInt() + panel.height.toInt() / 2
+                val centerX = panel.x.toInt() + panel.width.toInt() / 2
+                val centerY = panel.y.toInt() + panel.height.toInt() / 2
+                val count = maxOf(3, preview.wheel.size)
+                val hit = hit(mouseX, mouseY, centerX, centerY, preview)
+                val nested = if (RadialMenu.type == 1) preview.wheel.getOrNull(preview.main)?.sub ?: emptyList() else emptyList()
+                val outer = RadialEditor.outerLayout(preview)
+                val highlightedOuter = if (hit.outer >= 0) hit.outer else preview.outer
+                val ring = if (RadialMenu.type == 2) outer.getOrNull(highlightedOuter)?.first ?: -1 else -1
+                val highlightedMain = if (RadialMenu.type == 0 && hit.main < 0) preview.main else hit.main
 
-                val b0 = RadialMenu.type == 0 && s1 >= 0 && s0 in list0.indices
-                val cur0 = if (b0) list0[s0].sub else list0
-                val num0 = maxOf(1, cur0.size)
-
-                val x2 = mouseX - x1
-                val y2 = mouseY - y1
-                val d0 = x2 * x2 + y2 * y2
-
-                val ex0 = if (b0) emptyList() else RadialEditor.extra()
-
-                var h0 = -1
-                var h1 = -1
-
-                if (d0 >= 225f) {
-                    if (!b0 && s0 in list0.indices) {
-                        h1 = when (RadialMenu.type) {
-                            2 -> RadialRenderState.hitRing(mouseX, mouseY, x1, y1, num0, RadialMenu.radius2, ex0.map { it.first }, false, RadialMenu.thickness)
-                            1 -> RadialRenderState.hitNested(mouseX, mouseY, x1, y1, num0, RadialMenu.radius2, s0, list0[s0].sub.size, false, RadialMenu.thickness)
-                            else -> -1
-                        }
-
-                        if (h1 != -1 && RadialMenu.type == 1) h0 = s0
-                    }
-
-                    if (h0 == -1 && h1 == -1) h0 = RadialRenderState.hit(mouseX, mouseY, x1, y1, num0, RadialMenu.radius1, RadialMenu.radius2)
-                }
-
-                val mini0 = if (RadialMenu.type == 1 && s0 in list0.indices) list0[s0].sub else emptyList()
-                val ring0 = if (RadialMenu.type == 2 && h1 != -1) ex0.getOrNull(h1)?.first ?: -1 else -1
-
-                RadialRenderState(graphics, x1, y1, num0, mini0, ex0, if (b0) -1 else s0, if (h1 != -1 && RadialMenu.type == 1) h1 else if (b0) h0 else if (h1 != -1) h1 else h0, s1, ring0)
+                RadialRenderState(
+                    graphics,
+                    centerX,
+                    centerY,
+                    count,
+                    nested,
+                    outer,
+                    highlightedMain,
+                    highlightedOuter,
+                    if (RadialMenu.type == 0) -1 else preview.main,
+                    ring,
+                )
             }
 
             ascend = true
@@ -155,4 +105,57 @@ class RadialPreview(main: ContainerPrimitive) {
             attach(panel)
         }
     }
+
+    private fun hit(
+        mouseX: Float,
+        mouseY: Float,
+        centerX: Int,
+        centerY: Int,
+        preview: RadialEditor.PreviewState,
+    ): Hit {
+        val dx = mouseX - centerX
+        val dy = mouseY - centerY
+        if (dx * dx + dy * dy < 225f) return Hit()
+
+        val count = maxOf(3, preview.wheel.size)
+        var main = -1
+        var outer = -1
+
+        if (preview.main in preview.wheel.indices) {
+            outer = when (RadialMenu.type) {
+                1 -> RadialRenderState.hitNested(
+                    mouseX,
+                    mouseY,
+                    centerX,
+                    centerY,
+                    count,
+                    RadialMenu.radius2,
+                    preview.main,
+                    preview.wheel[preview.main].sub.size,
+                    false,
+                    RadialMenu.thickness,
+                )
+                2 -> RadialRenderState.hitRing(
+                    mouseX,
+                    mouseY,
+                    centerX,
+                    centerY,
+                    count,
+                    RadialMenu.radius2,
+                    RadialEditor.outerLayout(preview).map { it.first },
+                    false,
+                    RadialMenu.thickness,
+                )
+                else -> -1
+            }
+        }
+
+        if (outer < 0) {
+            main = RadialRenderState.hit(mouseX, mouseY, centerX, centerY, count, RadialMenu.radius1, RadialMenu.radius2)
+        }
+
+        return Hit(main, outer)
+    }
+
+    private data class Hit(val main: Int = -1, val outer: Int = -1)
 }

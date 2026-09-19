@@ -19,85 +19,102 @@ class RadialOverlay(private val panel: IPrimitiveElement<*>) : IPrimitiveElement
     override var color: CascadeGeometricColor = CascadeGeometricColor.WHITE
 
     override fun draw(graphics: GuiGraphicsExtractor) {
-        val working = RadialEditor.working.takeIf { it.isNotEmpty() } ?: return
+        val preview = RadialEditor.preview()
+        if (preview.wheel.isEmpty()) return
 
-        val i0 = RadialEditor.main
-        val i1 = RadialEditor.sub
+        val centerX = panel.x.toInt() + panel.width.toInt() / 2
+        val centerY = panel.y.toInt() + panel.height.toInt() / 2
+        val count = maxOf(3, preview.wheel.size)
+        val outer = RadialEditor.outerLayout(preview)
 
-        val x0 = panel.x.toInt() + 160
-        val y0 = panel.y.toInt() + 160
+        val dx = mouseX - centerX
+        val dy = mouseY - centerY
+        val centerHovered = dx * dx + dy * dy < 144f
 
-        val mx = mouseX
-        val my = mouseY
+        var mainHit = -1
+        var outerHit = -1
 
-        val bool = RadialMenu.type == 0 && i1 >= 0 && i0 in working.indices
-        val current = if (bool) working[i0].sub else working
-        val size = maxOf(1, current.size)
-
-        val x1 = mx - x0
-        val y1 = my - y0
-        val hc = x1 * x1 + y1 * y1 < 144f
-        val ex = if (!bool) RadialEditor.extra() else emptyList()
-
-        var main = -1
-        var sub = -1
-
-        if (!hc && x1 * x1 + y1 * y1 >= 225f) {
-            if (!bool && RadialMenu.type == 2 && i0 in working.indices) {
-                val hit = RadialRenderState.hitRing(mx, my, x0, y0, size, RadialMenu.radius2, ex.map { it.first }, false, RadialMenu.thickness)
-                if (hit != -1) sub = hit
-            }
-
-            if (!bool && sub == -1 && RadialMenu.type == 1 && i0 in working.indices) {
-                val hit = RadialRenderState.hitNested(mx, my, x0, y0, size, RadialMenu.radius2, i0, working[i0].sub.size, false, RadialMenu.thickness)
-                if (hit != -1) {
-                    main = i0
-                    sub = hit
+        if (!centerHovered && dx * dx + dy * dy >= 225f) {
+            if (preview.main in preview.wheel.indices) {
+                outerHit = when (RadialMenu.type) {
+                    1 -> RadialRenderState.hitNested(
+                        mouseX,
+                        mouseY,
+                        centerX,
+                        centerY,
+                        count,
+                        RadialMenu.radius2,
+                        preview.main,
+                        preview.wheel[preview.main].sub.size,
+                        false,
+                        RadialMenu.thickness,
+                    )
+                    2 -> RadialRenderState.hitRing(
+                        mouseX,
+                        mouseY,
+                        centerX,
+                        centerY,
+                        count,
+                        RadialMenu.radius2,
+                        outer.map { it.first },
+                        false,
+                        RadialMenu.thickness,
+                    )
+                    else -> -1
                 }
             }
 
-            if (main == -1 && sub == -1) {
-                main = RadialRenderState.hit(mx, my, x0, y0, size, RadialMenu.radius1, RadialMenu.radius2)
+            if (outerHit < 0) {
+                mainHit = RadialRenderState.hit(mouseX, mouseY, centerX, centerY, count, RadialMenu.radius1, RadialMenu.radius2)
             }
         }
 
-        for (i in current.indices) {
-            val (sx, sy) = RadialRenderState.anchor(x0, y0, size, RadialMenu.radius1, RadialMenu.radius2, i)
-            graphics.item(current[i].item, sx - 8, sy - 8)
+        for (index in preview.wheel.indices) {
+            val (slotX, slotY) = RadialRenderState.anchor(centerX, centerY, count, RadialMenu.radius1, RadialMenu.radius2, index)
+            graphics.item(preview.wheel[index].item, slotX - 8, slotY - 8)
         }
 
-        if (!bool && RadialMenu.type == 1 && i0 in working.indices) {
-            for (j in working[i0].sub.indices) {
-                val (sx, sy) = RadialRenderState.nested(x0, y0, size, RadialMenu.radius2, i0, j, RadialMenu.thickness)
-                graphics.item(working[i0].sub[j].item, sx - 8, sy - 8)
+        if (RadialMenu.type == 1 && preview.main in preview.wheel.indices) {
+            for (index in preview.wheel[preview.main].sub.indices) {
+                val (slotX, slotY) = RadialRenderState.nested(centerX, centerY, count, RadialMenu.radius2, preview.main, index, RadialMenu.thickness)
+                graphics.item(preview.wheel[preview.main].sub[index].item, slotX - 8, slotY - 8)
             }
         }
 
-        if (!bool && RadialMenu.type == 2) {
-            for ((i, s) in ex) {
-                val (sx, sy) = RadialRenderState.ring(x0, y0, size, RadialMenu.radius2, i, RadialMenu.thickness)
-                graphics.item(s.item, sx - 8, sy - 8)
+        if (RadialMenu.type == 2) {
+            for ((position, slot) in outer) {
+                val (slotX, slotY) = RadialRenderState.ring(centerX, centerY, count, RadialMenu.radius2, position, RadialMenu.thickness)
+                graphics.item(slot.item, slotX - 8, slotY - 8)
             }
         }
 
-        val back = bool || (RadialMenu.type == 2 && i0 in working.indices && i1 >= 0)
-        val str = if (back) "←" else "✕"
+        val canGoBack = preview.outer >= 0 || preview.wheelPath.isNotEmpty()
+        val centerLabel = if (canGoBack) "←" else "✕"
+        MinecraftFontRenderer.extract(
+            graphics,
+            centerLabel,
+            centerX - MinecraftFontMeasurer.width(centerLabel) / 2,
+            centerY - MinecraftFontMeasurer.height / 2,
+            false,
+            if (centerHovered) MochaColorScheme.Lavender.argb else MochaColorScheme.Subtext0.argb,
+        )
 
-        MinecraftFontRenderer.extract(graphics, str, x0 - MinecraftFontMeasurer.width(str) / 2, y0 - MinecraftFontMeasurer.height / 2, false, if (hc) MochaColorScheme.Lavender.argb else MochaColorScheme.Subtext0.argb)
-
-        val label = if (hc) (if (back) "Back" else "Exit") else {
-            if (sub != -1) working.getOrNull(i0)?.sub?.getOrNull(sub)?.name
-            else current.getOrNull(main)?.name
+        val label = if (centerHovered) {
+            if (canGoBack) "Back" else "Exit"
+        } else if (outerHit >= 0) {
+            preview.wheel.getOrNull(preview.main)?.sub?.getOrNull(outerHit)?.name
+        } else {
+            preview.wheel.getOrNull(mainHit)?.name
         }
 
         if (label != null && panel.hovered) {
             val width = MinecraftFontMeasurer.width(label)
-            val mx0 = mx.toInt() + 12
-            val my0 = my.toInt() - 4
+            val labelX = mouseX.toInt() + 12
+            val labelY = mouseY.toInt() - 4
 
-            graphics.rectangle(mx0 - 5f, my0 - 5f, width + 10f, MinecraftFontMeasurer.height + 10f, MochaColorScheme.Base.argb)
-            graphics.hollowRectangle(mx0 - 5f, my0 - 5f, width + 10f, MinecraftFontMeasurer.height + 10f, 1f, MochaColorScheme.Lavender.argb, inset = false)
-            MinecraftFontRenderer.extract(graphics, label, mx0, my0, false, MochaColorScheme.Text.argb)
+            graphics.rectangle(labelX - 5f, labelY - 5f, width + 10f, MinecraftFontMeasurer.height + 10f, MochaColorScheme.Base.argb)
+            graphics.hollowRectangle(labelX - 5f, labelY - 5f, width + 10f, MinecraftFontMeasurer.height + 10f, 1f, MochaColorScheme.Lavender.argb, inset = false)
+            MinecraftFontRenderer.extract(graphics, label, labelX, labelY, false, MochaColorScheme.Text.argb)
         }
     }
 }
