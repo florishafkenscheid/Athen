@@ -27,6 +27,8 @@ import foo.starred.kontext.api.text.parser.impl.parse
 import foo.starred.kontext.util.compress
 import foo.starred.kontext.util.decompress
 import net.minecraft.network.chat.Component
+import net.minecraft.network.chat.ComponentUtils
+import net.minecraft.network.chat.FormattedText
 
 @LoadableAthenModule
 @AthenModuleScope(skyblock = true)
@@ -132,66 +134,93 @@ object ColoredEnchants : Module(
             if (enchants.isEmpty()) return@on
             if (item.get<SkyBlockEnchantKontextItemDataResolver, List<SkyBlockItemEnchant>>()?.isEmpty() != false) return@on
 
-            var found = false
-            for (index in tooltip.indices) {
-                val line = tooltip[index]
-                val plain = line.stripped()
+            color(tooltip)
+        }
+    }
 
-                if (found && plain.isEmpty()) break
-                if ("◆" in plain) continue
+    @JvmStatic
+    fun colorChatHover(text: FormattedText): FormattedText {
+        if (!enabled || enchants.isEmpty()) return text
+        val component = text as? Component ?: return text
+        val tooltip = lines(component)
 
-                val parts = line.toFlatList()
-                if (parts.firstOrNull()?.style?.color?.value == null) continue
+        return if (color(tooltip)) ComponentUtils.formatList(tooltip, Component.literal("\n")) else text
+    }
 
-                val result = EMPTY_COMPONENT.copy()
-                for (part in parts) {
-                    val text = part.string
-                    val matches = enchantRegex.findAll(text).toList()
+    private fun lines(component: Component): MutableList<Component> {
+        val lines = mutableListOf(EMPTY_COMPONENT.copy())
+        for (part in component.toFlatList()) {
+            for ((index, text) in part.string.split('\n').withIndex()) {
+                if (index > 0) lines.add(EMPTY_COMPONENT.copy())
+                if (text.isNotEmpty()) lines.last().append(Component.literal(text).withStyle(part.style))
+            }
+        }
 
-                    fun keep(value: String) {
-                        result.append(Component.literal(value).withStyle(part.style))
+        return lines.toMutableList<Component>()
+    }
+
+    private fun color(tooltip: MutableList<Component>): Boolean {
+        var found = false
+        for (index in tooltip.indices) {
+            val line = tooltip[index]
+            val plain = line.stripped()
+
+            if (found && plain.isEmpty()) break
+            if ("◆" in plain) continue
+
+            val parts = line.toFlatList()
+            if (parts.firstOrNull()?.style?.color?.value == null) continue
+
+            val result = EMPTY_COMPONENT.copy()
+            for (part in parts) {
+                val text = part.string
+                val matches = enchantRegex.findAll(text).toList()
+
+                fun keep(value: String) {
+                    result.append(Component.literal(value).withStyle(part.style))
+                }
+
+                if (matches.isEmpty()) {
+                    result.append(part)
+                    continue
+                }
+
+                var cursor = 0
+                for (match in matches) {
+                    val start = match.range.first
+                    val end = match.range.last + 1
+
+                    if (start > cursor) {
+                        keep(text.substring(cursor, start))
                     }
 
-                    if (matches.isEmpty()) {
-                        result.append(part)
+                    val key = match.groups["enchant"]?.value?.lowercase() ?: continue
+                    val roman = match.groups["level"]?.value ?: continue
+                    val level = roman.parseRomanNumeral() ?: continue
+
+                    val enchant = enchants[key]
+                    if (enchant == null) {
+                        keep(text.substring(start, end))
+                        cursor = end
                         continue
                     }
 
-                    var cursor = 0
-                    for (match in matches) {
-                        val start = match.range.first
-                        val end = match.range.last + 1
+                    val comma = if (end < text.length && text[end] == ',') "," else ""
 
-                        if (start > cursor) {
-                            keep(text.substring(cursor, start))
-                        }
-
-                        val key = match.groups["enchant"]?.value?.lowercase() ?: continue
-                        val roman = match.groups["level"]?.value ?: continue
-                        val level = roman.parseRomanNumeral() ?: continue
-
-                        val enchant = enchants[key]
-                        if (enchant == null) {
-                            keep(text.substring(start, end))
-                            cursor = end
-                            continue
-                        }
-
-                        val comma = if (end < text.length && text[end] == ',') "," else ""
-
-                        result.append("${enchant.style(level)}${enchant.name} ${if (replaceRoman) level else roman}$comma".parse())
-                        cursor = end + comma.length
-                        found = true
-                    }
-
-                    if (cursor < text.length) {
-                        keep(text.substring(cursor))
-                    }
+                    result.append("${enchant.style(level)}${enchant.name} ${if (replaceRoman) level else roman}$comma".parse())
+                    cursor = end + comma.length
+                    found = true
                 }
 
-                tooltip[index] = result
+                if (cursor < text.length) {
+                    keep(text.substring(cursor))
+                }
             }
+
+            tooltip[index] = result
         }
+
+        return found
     }
 
     private data class Enchant(
